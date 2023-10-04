@@ -16,6 +16,9 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: vyos/vyos-build:sagitta
+      env:
+        GOSU_UID: $(id -u)
+        GOSU_GID: $(id -g)
       options: --workdir /vyos --privileged
 
     steps:
@@ -27,13 +30,13 @@ jobs:
         run: |
            git clone -b linux-6.1.y --single-branch https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git
            curl https://raw.githubusercontent.com/thomasdba/vyos-build-action/myown/.github/workflows/vyos_defconfig -o arch/x86/configs/vyos_defconfig
-           ./build-kernel.sh
+           sudo ./build-kernel.sh
            
       - name: Build ISO
         working-directory: ./vyos-build
         run: |
           make clean
-          ./build-vyos-image iso --architecture $ARCHITECTURE --build-by $BUILD_BY --build-type $BUILD_TYPE --version $VERSION-$(date +%Y%m%d%H%M)
+          sudo ./build-vyos-image iso --architecture $ARCHITECTURE --build-by $BUILD_BY --build-type $BUILD_TYPE --version $VERSION-$(date +%Y%m%d%H%M)
 
       - name: Upload artifact
         uses: actions/upload-artifact@v3
