@@ -27,13 +27,13 @@ jobs:
         run: |
            git clone -b linux-6.1.y --single-branch https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git
            curl https://raw.githubusercontent.com/thomasdba/vyos-build-action/myown/.github/workflows/vyos_defconfig -o arch/x86/configs/vyos_defconfig
-           sudo ./build-kernel.sh
+           ./build-kernel.sh
            
       - name: Build ISO
         working-directory: ./vyos-build
         run: |
-          sudo make clean
-          sudo ./build-vyos-image iso --architecture $ARCHITECTURE --build-by $BUILD_BY --build-type $BUILD_TYPE --version $VERSION-$(date +%Y%m%d%H%M)
+          make clean
+          ./build-vyos-image iso --architecture $ARCHITECTURE --build-by $BUILD_BY --build-type $BUILD_TYPE --version $VERSION-$(date +%Y%m%d%H%M)
 
       - name: Upload artifact
         uses: actions/upload-artifact@v3
@@ -41,34 +41,4 @@ jobs:
           name: vyos-${{ env.VERSION }}-${{ env.ARCHITECTURE }}-iso
           path: vyos-build/build/vyos-${{ env.VERSION }}-*.iso
 
-  release:
-    needs: build
-    runs-on: ubuntu-latest
 
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v3
-
-      - name: Download artifact
-        uses: actions/download-artifact@v3
-        with:
-          name: vyos-${{ env.VERSION }}-${{ env.ARCHITECTURE }}-iso
-          path: vyos-${{ env.VERSION }}-${{ env.ARCHITECTURE }}-iso
-
-      - name: Upload release asset
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          asset=$(find ./vyos-${{ env.VERSION }}-${{ env.ARCHITECTURE }}-iso/ -name "vyos-${{ env.VERSION }}-*.iso" | xargs)
-          tag_name="v${{ env.VERSION }}"
-          hub release edit -a "$asset" -m "" "$tag_name"
-
-  delete_old_workflow_runs:
-    needs: release
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Delete old workflow runs
-        uses: GitRML/delete-workflow-runs@main
-        with:
-          retain_days: 31
