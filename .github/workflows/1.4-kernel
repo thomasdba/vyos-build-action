@@ -1,0 +1,74 @@
+name: VyOS v1.4 Rolling Release
+
+on: workflow_dispatch
+ 
+env:
+  GIT_CLONE_URL: https://github.com/vyos/vyos-build
+  BRANCH: sagitta
+  ARCHITECTURE: amd64
+  BUILD_BY: thomas@flomesh.cn
+  BUILD_TYPE: release
+  VERSION: 1.4
+  DEBIAN_MIRROR: http://ftp.us.debian.org/debian/
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container:
+      image: vyos/vyos-build:sagitta
+      options: --workdir /vyos --privileged
+
+    steps:
+      - name: Clone source code
+        run: git clone -b $BRANCH --single-branch $GIT_CLONE_URL
+      
+      - name: build kernel
+        working-directory: ./vyos-build/packages/linux-kernel
+        run: |
+           git clone -b linux-6.1.y --single-branch https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git
+           curl https://raw.githubusercontent.com/thomasdba/vyos-build-action/myown/.github/workflows/vyos_defconfig -o arch/x86/configs/vyos_defconfig
+           sudo ./build-kernel.sh
+           
+      - name: Build ISO
+        working-directory: ./vyos-build
+        run: |
+          sudo make clean
+          sudo ./build-vyos-image iso --architecture $ARCHITECTURE --build-by $BUILD_BY --build-type $BUILD_TYPE --version $VERSION-$(date +%Y%m%d%H%M)
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: vyos-${{ env.VERSION }}-${{ env.ARCHITECTURE }}-iso
+          path: vyos-build/build/vyos-${{ env.VERSION }}-*.iso
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Download artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: vyos-${{ env.VERSION }}-${{ env.ARCHITECTURE }}-iso
+          path: vyos-${{ env.VERSION }}-${{ env.ARCHITECTURE }}-iso
+
+      - name: Upload release asset
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          asset=$(find ./vyos-${{ env.VERSION }}-${{ env.ARCHITECTURE }}-iso/ -name "vyos-${{ env.VERSION }}-*.iso" | xargs)
+          tag_name="v${{ env.VERSION }}"
+          hub release edit -a "$asset" -m "" "$tag_name"
+
+  delete_old_workflow_runs:
+    needs: release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Delete old workflow runs
+        uses: GitRML/delete-workflow-runs@main
+        with:
+          retain_days: 31
